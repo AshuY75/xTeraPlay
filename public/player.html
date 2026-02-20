@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xTeraPlayer – In-App Streaming</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            height: 100vh;
+            font-family: -apple-system, sans-serif;
+            overflow: hidden;
+        }
+
+        #video-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video {
+            width: 100%;
+            max-height: 100vh;
+            z-index: 1;
+        }
+
+        .loader {
+            position: absolute;
+            z-index: 10;
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid #00d2ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .seek-overlay {
+            position: absolute;
+            z-index: 20;
+            font-size: 40px;
+            color: white;
+            background: rgba(0, 0, 0, 0.4);
+            width: 80px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            opacity: 0;
+            pointer-events: none;
+            transition: none;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .seek-overlay.left {
+            left: 10%;
+        }
+
+        .seek-overlay.right {
+            right: 10%;
+        }
+
+        .seek-overlay.active {
+            animation: seekFade 0.6s forwards;
+        }
+
+        @keyframes seekFade {
+            0% {
+                opacity: 0;
+                transform: translateY(-50%) scale(0.8);
+            }
+
+            30% {
+                opacity: 1;
+                transform: translateY(-50%) scale(1.1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateY(-50%) scale(1.4);
+            }
+        }
+
+        .error-overlay {
+            color: #ff4d4d;
+            text-align: center;
+            background: #111;
+            padding: 20px;
+            border-radius: 12px;
+            z-index: 30;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="video-container">
+        <div class="seek-overlay left">⏪</div>
+        <div class="seek-overlay right">⏩</div>
+        <div class="loader" id="loader"></div>
+        <video id="player" controls playsinline></video>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+        const player = document.getElementById('player');
+        const loader = document.getElementById('loader');
+
+        function showLoader() { loader.style.display = 'block'; }
+        function hideLoader() { loader.style.display = 'none'; }
+
+        if (!id) {
+            document.body.innerHTML = '<div class="error-overlay">Missing Session ID</div>';
+        } else {
+            showLoader();
+            fetch(`/api/video/${id}`)
+                .then(res => res.json())
+                .then(data => {
+                    const url = data.videoUrl;
+                    if (url.includes('.m3u8')) {
+                        if (Hls.isSupported()) {
+                            const hls = new Hls();
+                            hls.loadSource(url);
+                            hls.attachMedia(player);
+                            hls.on(Hls.Events.MANIFEST_PARSED, () => player.play().catch(() => { }));
+                        } else {
+                            player.src = url;
+                        }
+                    } else {
+                        player.src = url;
+                    }
+                })
+                .catch(err => {
+                    document.body.innerHTML = '<div class="error-overlay">Session Expired</div>';
+                });
+        }
+
+        // 5️⃣ Double Click Seek
+        document.getElementById('video-container').addEventListener('dblclick', (e) => {
+            const rect = player.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            if (x < rect.width / 2) {
+                player.currentTime -= 5;
+                showSeek('left');
+            } else {
+                player.currentTime += 5;
+                showSeek('right');
+            }
+        });
+
+        function showSeek(dir) {
+            const el = document.querySelector(`.seek-overlay.${dir}`);
+            el.classList.add('active');
+            setTimeout(() => el.classList.remove('active'), 600);
+        }
+
+        // 7️⃣ Keyboard Controls
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') player.paused ? player.play() : player.pause();
+            if (e.key.toLowerCase() === 'f') document.fullscreenElement ? document.exitFullscreen() : player.requestFullscreen().catch(() => { });
+            if (e.key === 'ArrowRight') player.currentTime += 5, showSeek('right');
+            if (e.key === 'ArrowLeft') player.currentTime -= 5, showSeek('left');
+        });
+
+        player.addEventListener('waiting', showLoader);
+        player.addEventListener('playing', hideLoader);
+        player.addEventListener('canplay', hideLoader);
+    </script>
+</body>
+
+</html>

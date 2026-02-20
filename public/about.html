@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Us - xTeraPlay</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .content-page {
+            padding: 8rem 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .content-page h1 {
+            margin-bottom: 2rem;
+        }
+
+        .content-page p {
+            margin-bottom: 2rem;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .mission-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            text-align: left;
+            margin-top: 4rem;
+        }
+
+        @media (max-width: 768px) {
+            .mission-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">xTera<span>Play</span></a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/terms">Terms & Conditions</a>
+                <a href="/privacy">Privacy</a>
+                <a href="/contact">Contact</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="content-page container animate-fadeIn">
+        <h1 class="gradient-text">Who We Are</h1>
+        <p>xTeraPlay was born from a simple need: a fast, elegant, and seamless way to enjoy TeraBox content without the
+            friction of complex interfaces or intrusive ads. We believe the web should be clean, fast, and accessible to
+            everyone.</p>
+
+        <div class="mission-grid">
+            <div class="glass card-content"
+                style="background: var(--bg-surface); padding: 2rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+                <h3 style="color: var(--accent-neon); margin-bottom: 1rem;">Our Mission</h3>
+                <p style="font-size: 0.95rem;">To provide the most robust link extraction and video playback service for
+                    TeraBox users worldwide, focusing on performance and user experience.</p>
+            </div>
+            <div class="glass card-content"
+                style="background: var(--bg-surface); padding: 2rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+                <h3 style="color: var(--accent-neon); margin-bottom: 1rem;">Why xTeraPlay?</h3>
+                <p style="font-size: 0.95rem;">We use state-of-the-art scraping technology and a custom-built HLS
+                    playback engine to ensure your videos play smoothly every time.</p>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-bottom">
+            &copy; 2026 xTeraPlay. All rights reserved.
+        </div>
+    </footer>
+</body>
+
+</html>

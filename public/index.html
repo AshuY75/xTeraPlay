@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xTeraPlay – Ultimate TeraBox Streaming</title>
+    <link rel="icon" type="image/png" href="/assets/logo.png">
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+
+<body oncontextmenu="return false;">
+
+    <!-- 9️⃣ Navbar -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">
+                <img src="/assets/logo.png" alt="xTeraPlay"
+                    style="height: 32px; vertical-align: middle; margin-right: 10px;">
+                xTera<span>Play</span>
+            </a>
+            <div class="nav-links">
+                <a href="/" class="active">Home</a>
+                <a href="/terms">Terms</a>
+                <a href="/privacy">Privacy</a>
+                <a href="/contact">Contact</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 6️⃣ Hero Section -->
+    <section class="hero animate-fadeIn">
+        <div class="container">
+            <h1>Professional TeraBox Player</h1>
+            <p>The premium SaaS solution for buffer-free TeraBox streaming. Paste your link and experience the
+                difference.</p>
+
+            <div class="input-wrapper">
+                <input type="url" id="teraboxUrl" placeholder="Paste your TeraBox link here..." required>
+                <button id="extractBtn">Play Video</button>
+            </div>
+            <div id="errorDisplay" style="display:none; color: #ff3366; margin-top: 20px; font-weight: 500;"></div>
+        </div>
+    </section>
+
+    <!-- 7️⃣ 3️⃣ Player Section -->
+    <section class="player-section">
+        <div class="container">
+            <div id="videoWrapper" class="video-wrapper">
+                <!-- 5️⃣ Seek Overlays -->
+                <div class="seek-overlay left"><span class="seek-icon">⏪ 5s</span></div>
+                <div class="seek-overlay right"><span class="seek-icon">5s ⏩</span></div>
+
+                <div id="playerPlaceholder" class="player-placeholder">
+                    <img src="https://cdn-icons-png.flaticon.com/512/716/716429.png" style="width: 56px; opacity: 0.15;"
+                        alt="xTeraPlay">
+                    <h3 style="margin-top: 20px; color: #fff;">System Ready</h3>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">Stream will initialize here</p>
+                </div>
+
+                <div id="playerLoader" class="player-loader">
+                    <div class="loader"></div>
+                    <p
+                        style="margin-top: 25px; color: var(--accent-neon); font-weight: 700; font-size: 0.75rem; letter-spacing: 2px;">
+                        SYNCHRONIZING...</p>
+                </div>
+
+                <video id="videoPlayer" controls crossorigin="anonymous" playsinline></video>
+            </div>
+        </div>
+    </section>
+
+    <!-- 8️⃣ Recently Played -->
+    <section class="recent-section">
+        <div class="container">
+            <h2 style="margin-bottom: 35px; font-family: var(--font-heading); font-size: 1.8rem;">🔥 Community Picks
+            </h2>
+            <div id="recentGrid" class="recent-grid">
+                <!-- Cards injected via JS -->
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            &copy; 2026 xTeraPlay. The standard in video extraction.
+        </div>
+    </footer>
+
+    <script>
+        const inputUrl = document.getElementById('teraboxUrl');
+        const extractBtn = document.getElementById('extractBtn');
+        const errorDisplay = document.getElementById('errorDisplay');
+        const videoWrapper = document.getElementById('videoWrapper');
+        const placeholder = document.getElementById('playerPlaceholder');
+        const loader = document.getElementById('playerLoader');
+        const video = document.getElementById('videoPlayer');
+        const recentGrid = document.getElementById('recentGrid');
+
+        let hls = null;
+
+        function showLoader() { loader.style.display = 'flex'; }
+        function hideLoader() { loader.style.display = 'none'; }
+
+        // 3️⃣ Robust Playback Engine: Proper resets + 1️⃣ Zero Truncation Verification
+        async function loadVideo(streamUrl, originalUrl = null, useProxy = false) {
+            showLoader();
+
+            // Critical Reset logic
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+
+            const finalUrl = useProxy ? `/proxy?url=${encodeURIComponent(streamUrl)}` : streamUrl;
+
+            placeholder.style.display = 'none';
+            video.style.display = 'block';
+
+            if (Hls.isSupported() && finalUrl.includes('.m3u8')) {
+                if (hls) hls.destroy();
+                hls = new Hls();
+                hls.loadSource(finalUrl);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(() => { });
+                });
+                hls.on(Hls.Events.ERROR, async (e, data) => {
+                    if (data.fatal) {
+                        if (!useProxy) {
+                            loadVideo(streamUrl, originalUrl, true);
+                        } else if (originalUrl) {
+                            await reExtractAndPlay(originalUrl);
+                        }
+                    }
+                });
+            } else {
+                video.src = finalUrl;
+                video.load();
+                video.oncanplay = () => {
+                    hideLoader();
+                    video.play().catch(() => { });
+                };
+                video.onerror = async () => {
+                    if (!useProxy) {
+                        loadVideo(streamUrl, originalUrl, true);
+                    } else if (originalUrl) {
+                        await reExtractAndPlay(originalUrl);
+                    } else {
+                        hideLoader();
+                        showError('Stream link expired.');
+                    }
+                };
+            }
+        }
+
+        async function reExtractAndPlay(url) {
+            showLoader();
+            try {
+                const res = await fetch('/api/extract', {
+                    method: 'POST',
+                    body: JSON.stringify({ teraboxUrl: url }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadVideo(data.streamUrl, url);
+                    fetchRecent();
+                } else showError('Link has permanently expired.');
+            } catch (e) { showError('Re-extraction failed.'); }
+        }
+
+        // 5️⃣ Double Click Seek
+        videoWrapper.addEventListener('dblclick', (e) => {
+            const rect = videoWrapper.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            if (clickX < rect.width / 2) {
+                video.currentTime -= 5;
+                showSeek("left");
+            } else {
+                video.currentTime += 5;
+                showSeek("right");
+            }
+        });
+
+        function showSeek(dir) {
+            const el = document.querySelector(`.seek-overlay.${dir}`);
+            el.classList.add("active");
+            setTimeout(() => el.classList.remove("active"), 600);
+        }
+
+        // 4️⃣ Keyboard Controls
+        document.addEventListener('keydown', (e) => {
+            if (document.activeElement.tagName === 'INPUT') return;
+
+            if (e.key === 'Enter') {
+                if (video.paused) video.play().catch(() => { });
+                else video.pause();
+            }
+            if (e.key.toLowerCase() === 'f') {
+                if (!document.fullscreenElement) video.requestFullscreen();
+                else document.exitFullscreen();
+            }
+            if (e.key === 'ArrowRight') {
+                video.currentTime += 5;
+                showSeek("right");
+            }
+            if (e.key === 'ArrowLeft') {
+                video.currentTime -= 5;
+                showSeek("left");
+            }
+        });
+
+        // 7️⃣ Scoped Loader states
+        video.addEventListener('loadstart', showLoader);
+        video.addEventListener('waiting', showLoader);
+        video.addEventListener('seeking', showLoader);
+        video.addEventListener('canplay', hideLoader);
+        video.addEventListener('playing', hideLoader);
+
+        async function fetchRecent() {
+            try {
+                const res = await fetch('/api/recent');
+                const videos = await res.json();
+                console.log("Fetched URL check:", videos[0]?.streamUrl?.length);
+                renderRecent(videos);
+            } catch (err) { }
+        }
+
+        function renderRecent(videos) {
+            recentGrid.innerHTML = videos.map(v => `
+                <div class="video-card" onclick="loadHistory('${v.originalUrl}', '${v.streamUrl}')">
+                    <div class="thumb-wrapper">
+                        ${v.thumbnail ?
+                    `<img src="${v.thumbnail}" alt="">` :
+                    `<video class="preview-video" src="/proxy?url=${encodeURIComponent(v.streamUrl)}" muted preload="metadata" onmouseover="this.play()" onmouseout="this.pause()" onloadedmetadata="this.currentTime=2"></video>`
+                }
+                        <div class="play-icon-overlay"><span>▶</span></div>
+                    </div>
+                    <h4 style="margin-bottom: 8px;">${v.title}</h4>
+                    <div class="video-meta">
+                        <span>${v.views.toLocaleString()} views</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadHistory(orig, stream) {
+            window.scrollTo({ top: videoWrapper.offsetTop - 120, behavior: 'smooth' });
+            fetch('/api/view', { method: 'POST', body: JSON.stringify({ url: orig }), headers: { 'Content-Type': 'application/json' } }).catch(() => { });
+            loadVideo(stream, orig);
+        }
+
+        extractBtn.addEventListener('click', async () => {
+            const url = inputUrl.value.trim();
+            if (!url) return;
+
+            showLoader();
+            try {
+                const res = await fetch('/api/extract', {
+                    method: 'POST',
+                    body: JSON.stringify({ teraboxUrl: url }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadVideo(data.streamUrl, url);
+                    fetchRecent();
+                } else showError(data.error);
+            } catch (e) { showError('Link extraction failed.'); }
+        });
+
+        function showError(m) {
+            errorDisplay.textContent = m;
+            errorDisplay.style.display = 'block';
+            hideLoader();
+        }
+
+        fetchRecent();
+    </script>
+</body>
+
+</html>
