@@ -67,7 +67,10 @@ async function initCluster() {
                         () => {
                             const v = document.querySelector('video');
                             const s = document.querySelector('video source');
-                            return (v && v.src) || (s && s.src);
+                            const vpl = window.videoPlayLink;
+                            // Ensure the source is a real link (not the page URL or a short placeholder)
+                            const isReal = (src) => src && src.length > 20 && !src.includes('/terabox/');
+                            return vpl || isReal(v?.src) || isReal(s?.src);
                         },
                         { timeout: 60000 }
                     );
@@ -78,8 +81,14 @@ async function initCluster() {
                         const video = document.querySelector('video');
                         const sources = Array.from(document.querySelectorAll('video source')).map(s => s.src);
                         let allUrls = [];
+                        
+                        // Prioritize the direct link variable found suring audit
+                        if (window.videoPlayLink) allUrls.push(window.videoPlayLink);
                         if (video && video.src) allUrls.push(video.src);
-                        allUrls = [...new Set([...allUrls, ...sources])].filter(u => u.length > 5);
+                        
+                        allUrls = [...new Set([...allUrls, ...sources])].filter(u => {
+                            return u && u.length > 20 && !u.includes('/terabox/') && u.startsWith('http');
+                        });
 
                         return {
                             videoUrls: allUrls.length > 0 ? allUrls : [],
