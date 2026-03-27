@@ -3,6 +3,7 @@ require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const { getVideoUrl } = require('./scraperService');
 const express = require('express');
+const axios = require('axios');
 
 // --- Configuration ---
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -46,9 +47,15 @@ bot.start((ctx) => {
 });
 
 bot.on('text', async (ctx) => {
-    const userId = ctx.from.id; // Switch to User-Level Lock
+    const userId = ctx.from.id;
     const text = ctx.message.text.trim();
-    if (!text.includes('/s/')) return;
+    
+    // Extract first valid link using Regex
+    const linkRegex = /https?:\/\/(?:www\.)?(?:terabox|1024tera|terashare|nephobox|teraboxlink|terasharefile|freeterabox)\S+\/s\/[a-zA-Z0-9_-]+/i;
+    const match = text.match(linkRegex);
+    
+    if (!match) return;
+    const cleanLink = match[0];
 
     // Concurrency Check
     if (activeUsers.has(userId)) {
@@ -63,7 +70,7 @@ bot.on('text', async (ctx) => {
     const processingMsg = await ctx.reply('⏳ **Analyzing & Verifying Links...**\nThis typically takes 15-20 seconds.', { parse_mode: 'Markdown' });
 
     try {
-        const data = await getVideoUrl(text);
+        const data = await getVideoUrl(cleanLink);
         if (data && data.videoUrls && data.videoUrls.length > 0) {
 
             // Limit to top 3 for verification
