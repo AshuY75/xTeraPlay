@@ -4,88 +4,113 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
-let cluster;
-let isInitialized = false;
+let clusterPromise = null; // Promise-based singleton for thread-safety
 
 /**
- * Initializes the Puppeteer Cluster
+ * Initializes the Puppeteer Cluster (Single Instance)
  */
 async function initCluster() {
-    if (!isInitialized) {
-        console.log('[xTeraPlay] Launching Multi-Threaded Browser Cluster...');
-        cluster = await Cluster.launch({
-            concurrency: Cluster.CONCURRENCY_PAGE,
-            maxConcurrency: 5, // Optimized for 2GB+ RAM
-            puppeteerOptions: {
-                headless: true,
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
-            },
-            timeout: 120000,
-            retryLimit: 1
-        });
-
-        // Define the Extraction Task
-        await cluster.task(async ({ page, data: teraboxLink }) => {
-            console.log(`[xTeraPlay] Cluster Job Started: ${teraboxLink}`);
-
-            await page.goto('https://mdiskplay.com', { waitUntil: 'networkidle2', timeout: 60000 });
-
-            await page.waitForSelector('input[placeholder*="Paste Terabox Link"]', { timeout: 10000 });
-            await page.type('input[placeholder*="Paste Terabox Link"]', teraboxLink);
-            await page.click('.linkPasteBar_searchButton__drZLs');
-
-            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
-
-            await page.waitForFunction(
-                () => {
-                    const video = document.querySelector('video');
-                    return video && video.src && video.src.includes('.m3u8');
+    if (!clusterPromise) {
+        clusterPromise = (async () => {
+            console.log('[xTeraPlay] Initializing Multi-Threaded Browser Cluster...');
+            const instance = await Cluster.launch({
+                concurrency: Cluster.CONCURRENCY_PAGE,
+                maxConcurrency: 20, // Increased capacity
+                puppeteerOptions: {
+                    headless: true,
+                    args: ['--no-sandbox', '--disable-setuid-sandbox']
                 },
-                { timeout: 60000 }
-            );
-
-            const result = await page.evaluate(() => {
-                const video = document.querySelector('video');
-                return {
-                    videoUrl: video ? video.src : null,
-                    title: document.title.replace(" - mdiskplay.com", "").trim() || "TeraBox Video"
-                };
+                timeout: 120000,
+                retryLimit: 1
             });
 
-            console.log(`[xTeraPlay] Cluster Job Success: ${result.title}`);
-            return result;
-        });
+            // Define the extraction task
+            await instance.task(async ({ page, data: teraboxLink }) => {
+                console.log(`[xTeraPlay] Cluster Job Started: ${teraboxLink}`);
 
-        isInitialized = true;
+                // OPTIMIZATION: Block heavy resources
+                await page.setRequestInterception(true);
+                page.on('request', (request) => {
+                    const resourceType = request.resourceType();
+                    if (['image', 'font', 'media', 'stylesheet'].includes(resourceType)) {
+                        request.abort();
+                    } else {
+                        request.continue();
+                    }
+                });
+
+                try {
+                    // Navigate and extract
+                    await page.goto('https://mdiskplay.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
+                    await page.waitForSelector('input[placeholder*="Paste Terabox Link"]', { timeout: 15000 });
+                    await page.type('input[placeholder*="Paste Terabox Link"]', teraboxLink);
+                    await page.click('.linkPasteBar_searchButton__drZLs');
+
+                    await page.waitForFunction(
+                        () => {
+                            const video = document.querySelector('video');
+                            return video && video.src && video.src.includes('.m3u8');
+                        },
+                        { timeout: 60000 }
+                    );
+
+                    const result = await page.evaluate(() => {
+                        const video = document.querySelector('video');
+                        const sources = Array.from(document.querySelectorAll('video source')).map(s => s.src);
+                        let allUrls = [];
+                        if (video && video.src) allUrls.push(video.src);
+                        allUrls = [...new Set([...allUrls, ...sources])].filter(u => u.includes('.m3u8'));
+
+                        return {
+                            videoUrls: allUrls.length > 0 ? allUrls : [],
+                            title: document.title.replace(" - mdiskplay.com", "").trim() || "xTeraPlay Video"
+                        };
+                    });
+
+                    console.log(`[xTeraPlay] Cluster Job Success: ${result.title} (${result.videoUrls.length} links)`);
+                    return result;
+                } catch (err) {
+                    console.error(`[xTeraPlay] Extraction Error: ${err.message}`);
+                    return null;
+                }
+            });
+
+            console.log('[xTeraPlay] Browser Cluster Ready (Max Concurrency: 20)');
+            return instance;
+        })();
     }
-    return cluster;
+    return clusterPromise;
 }
 
 /**
- * Main Extraction Wrapper with Concurrency and Direct Link Detection
+ * Main Extraction Wrapper with Retry Logic
  */
-async function getVideoUrl(teraboxLink) {
-    // 1. Direct Link Fast-Pass
-    if (teraboxLink.includes('.m3u8') || teraboxLink.includes('source.m3u8')) {
-        console.log('[xTeraPlay] Direct Link Detected. Instant Playback.');
-        return { videoUrl: teraboxLink, title: 'Direct Stream' };
+async function getVideoUrl(teraboxLink, retryCount = 0) {
+    if (teraboxLink.includes('.m3u8')) {
+        return { videoUrls: [teraboxLink], title: 'Direct Stream' };
     }
 
-    // 2. Queue Job in Cluster
     try {
         const clusterInstance = await initCluster();
-        return await clusterInstance.execute(teraboxLink);
+        const result = await clusterInstance.execute(teraboxLink);
+        
+        if ((!result || !result.videoUrls || result.videoUrls.length === 0) && retryCount < 1) {
+            console.log(`[xTeraPlay] Retry (${retryCount + 1}) for: ${teraboxLink}`);
+            return await getVideoUrl(teraboxLink, retryCount + 1);
+        }
+
+        return result || { videoUrls: [], title: 'No Link Found' };
     } catch (error) {
-        console.error(`[xTeraPlay] Cluster Error: ${error.message}`);
-        return null;
+        if (retryCount < 1) return await getVideoUrl(teraboxLink, retryCount + 1);
+        return { videoUrls: [], title: 'System Error' };
     }
 }
 
 // Graceful Shutdown
 process.on('SIGINT', async () => {
-    if (cluster) {
-        console.log('[xTeraPlay] Closing Browser Cluster...');
-        await cluster.close();
+    if (clusterPromise) {
+        const clusterInstance = await clusterPromise;
+        await clusterInstance.close();
     }
     process.exit();
 });
