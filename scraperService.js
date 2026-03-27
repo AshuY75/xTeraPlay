@@ -49,26 +49,35 @@ async function initCluster() {
                 });
 
                 try {
-                    // Navigate and extract
-                    await page.goto('https://mdiskplay.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
-                    await page.waitForSelector('input[placeholder*="Paste Terabox Link"]', { timeout: 15000 });
-                    await page.type('input[placeholder*="Paste Terabox Link"]', teraboxLink);
+                    console.log(`[xTeraPlay] Navigating to proxy...`);
+                    await page.goto('https://mdiskplay.com', { waitUntil: 'networkidle2', timeout: 60000 });
+                    
+                    console.log(`[xTeraPlay] Typing link...`);
+                    const inputSelector = 'input.linkPasteBar_searchInput__lLKb9';
+                    await page.waitForSelector(inputSelector, { timeout: 20000 });
+                    await page.type(inputSelector, teraboxLink);
+                    
+                    console.log(`[xTeraPlay] Clicking search...`);
                     await page.click('.linkPasteBar_searchButton__drZLs');
 
+                    console.log(`[xTeraPlay] Waiting for video element...`);
                     await page.waitForFunction(
                         () => {
-                            const video = document.querySelector('video');
-                            return video && video.src && video.src.includes('.m3u8');
+                            const v = document.querySelector('video');
+                            const s = document.querySelector('video source');
+                            return (v && v.src) || (s && s.src);
                         },
                         { timeout: 60000 }
                     );
+
+                    console.log(`[xTeraPlay] Extracting sources...`);
 
                     const result = await page.evaluate(() => {
                         const video = document.querySelector('video');
                         const sources = Array.from(document.querySelectorAll('video source')).map(s => s.src);
                         let allUrls = [];
                         if (video && video.src) allUrls.push(video.src);
-                        allUrls = [...new Set([...allUrls, ...sources])].filter(u => u.includes('.m3u8'));
+                        allUrls = [...new Set([...allUrls, ...sources])].filter(u => u.length > 5);
 
                         return {
                             videoUrls: allUrls.length > 0 ? allUrls : [],
@@ -79,7 +88,9 @@ async function initCluster() {
                     console.log(`[xTeraPlay] Cluster Job Success: ${result.title} (${result.videoUrls.length} links)`);
                     return result;
                 } catch (err) {
+                    const htmlSnippet = await page.evaluate(() => document.body.innerText.substring(0, 500));
                     console.error(`[xTeraPlay] Extraction Error: ${err.message}`);
+                    console.error(`[xTeraPlay] Page Context: ${htmlSnippet}`);
                     return null;
                 }
             });
