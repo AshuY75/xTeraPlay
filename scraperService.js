@@ -14,8 +14,8 @@ async function initCluster() {
         clusterPromise = (async () => {
             console.log('[xTeraPlay] Initializing Multi-Threaded Browser Cluster...');
             const instance = await Cluster.launch({
-                concurrency: Cluster.CONCURRENCY_PAGE,
-                maxConcurrency: 3, // Lowered for Render Free Tier (512MB RAM)
+                concurrency: Cluster.CONCURRENCY_CONTEXT, // More isolated than PAGE
+                maxConcurrency: 3, 
                 puppeteerOptions: {
                     headless: true,
                     args: [
@@ -35,7 +35,10 @@ async function initCluster() {
             // Define the extraction task
             await instance.task(async ({ page, data: teraboxLink }) => {
                 const mem = process.memoryUsage();
-                console.log(`[xTeraPlay] Job Started. RAM: ${Math.round(mem.rss / 1024 / 1024)}MB. Link: ${teraboxLink}`);
+                console.log(`[xTeraPlay] Job Started. Link: ${teraboxLink}`);
+
+                page.on('error', err => console.error(`[xTeraPlay] Page Error: ${err.message}`));
+                page.on('pageerror', err => console.error(`[xTeraPlay] Browser JS Error: ${err.message}`));
 
                 // OPTIMIZATION: Block heavy resources
                 await page.setRequestInterception(true);
@@ -50,7 +53,8 @@ async function initCluster() {
 
                 try {
                     console.log(`[xTeraPlay] Navigating to proxy...`);
-                    await page.goto('https://mdiskplay.com', { waitUntil: 'networkidle2', timeout: 60000 });
+                    // Use domcontentloaded for speed and to avoid hanging on slow trackers
+                    await page.goto('https://mdiskplay.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
                     
                     console.log(`[xTeraPlay] Typing link...`);
                     const inputSelector = 'input.linkPasteBar_searchInput__lLKb9';
@@ -95,7 +99,7 @@ async function initCluster() {
                 }
             });
 
-            console.log('[xTeraPlay] Browser Cluster Ready (Max Concurrency: 20)');
+            console.log('[xTeraPlay] Browser Cluster Ready (Max Concurrency: 3)');
             return instance;
         })();
     }
