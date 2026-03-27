@@ -15,10 +15,18 @@ async function initCluster() {
             console.log('[xTeraPlay] Initializing Multi-Threaded Browser Cluster...');
             const instance = await Cluster.launch({
                 concurrency: Cluster.CONCURRENCY_PAGE,
-                maxConcurrency: 20, // Increased capacity
+                maxConcurrency: 3, // Lowered for Render Free Tier (512MB RAM)
                 puppeteerOptions: {
                     headless: true,
-                    args: ['--no-sandbox', '--disable-setuid-sandbox']
+                    args: [
+                        '--no-sandbox', 
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage', // Critical for Docker/Render
+                        '--disable-gpu',
+                        '--no-first-run',
+                        '--no-zygote',
+                        '--single-process' // Helps with memory on low-resource machines
+                    ]
                 },
                 timeout: 120000,
                 retryLimit: 1
@@ -26,7 +34,8 @@ async function initCluster() {
 
             // Define the extraction task
             await instance.task(async ({ page, data: teraboxLink }) => {
-                console.log(`[xTeraPlay] Cluster Job Started: ${teraboxLink}`);
+                const mem = process.memoryUsage();
+                console.log(`[xTeraPlay] Job Started. RAM: ${Math.round(mem.rss / 1024 / 1024)}MB. Link: ${teraboxLink}`);
 
                 // OPTIMIZATION: Block heavy resources
                 await page.setRequestInterception(true);
