@@ -14,18 +14,16 @@ async function initCluster() {
         clusterPromise = (async () => {
             console.log('[xTeraPlay] Initializing Multi-Threaded Browser Cluster...');
             const instance = await Cluster.launch({
-                concurrency: Cluster.CONCURRENCY_CONTEXT, // More isolated than PAGE
+                concurrency: Cluster.CONCURRENCY_PAGE, // Reverted for better plugin compatibility
                 maxConcurrency: 3, 
                 puppeteerOptions: {
                     headless: true,
                     args: [
                         '--no-sandbox', 
                         '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage', // Critical for Docker/Render
+                        '--disable-dev-shm-usage', // Essential for Render/Docker
                         '--disable-gpu',
-                        '--no-first-run',
-                        '--no-zygote',
-                        '--single-process' // Helps with memory on low-resource machines
+                        '--no-first-run'
                     ]
                 },
                 timeout: 120000,
