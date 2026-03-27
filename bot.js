@@ -2,6 +2,8 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const { getVideoUrl } = require('./scraperService');
+const express = require('express');
+
 // --- Configuration ---
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const PORT = process.env.PORT || 3000;
@@ -12,6 +14,7 @@ if (!BOT_TOKEN) {
 }
 
 const bot = new Telegraf(BOT_TOKEN);
+const app = express();
 const activeUsers = new Map(); // Concurrency Control
 
 // --- Helper: Link Verification ---
@@ -32,7 +35,9 @@ async function verifyLink(url) {
     }
 }
 
-// (Server Routes Removed)
+// --- Minimal Health Check for Render ---
+app.get('/', (req, res) => res.send('xTeraBot is Alive'));
+app.get('/health', (req, res) => res.send('OK'));
 
 // --- Bot Logic ---
 
@@ -105,7 +110,8 @@ bot.on('text', async (ctx) => {
     }
 });
 
-// Removed app.listen as Express is removed
+// --- Launch ---
+app.listen(PORT, () => console.log(`📡 Health Check Server on port ${PORT}`));
 bot.launch().then(() => console.log('🤖 Bot Online.'));
 process.once('SIGINT', () => { bot.stop('SIGINT'); process.exit(); });
 process.once('SIGTERM', () => { bot.stop('SIGTERM'); process.exit(); });
